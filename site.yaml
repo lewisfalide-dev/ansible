@@ -1,0 +1,79 @@
+---
+- name: Update web servers
+  become: true
+  hosts: all
+  vars_files: /home/user/task/products.yaml
+
+  tasks: 
+
+    - name: Install apache httpd (state=present is optional)
+      ansible.builtin.apt:
+        update_cache: yes
+        name: nginx
+        state: present
+
+    - name: Enable service nginx, and not touch the state
+      ansible.builtin.service:
+        name: nginx
+        enabled: yes
+
+    - name: Generate index.html from template
+      ansible.builtin.copy:
+        src:  /home/user/task/nginx.conf
+        dest: /etc/nginx/
+      notify:
+            - Restart_nginx
+
+
+    - name: delete /sites-enabled/default/ and defaul link
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+         -  /var/www/html/index.nginx-debian.html
+         - /etc/nginx/sites-enabled/default
+      notify:
+            - Restart_nginx
+
+
+
+    - name: Deploy nginx site configuration
+      ansible.builtin.template:
+        src: /home/user/task/site.conf.j2
+        dest: /etc/nginx/sites-available/site.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify:
+        - Restart_nginx
+
+
+    - name: Enable site by creating symlink
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/site.conf
+        dest: /etc/nginx/sites-enabled/site.conf
+        state: link
+      notify:
+        - Restart_nginx
+
+    - name: Generate index.html from template
+      ansible.builtin.template:
+        src: /home/user/task/web_page.j2
+        dest: /var/www/html/index.html
+      notify:
+            - Restart_nginx
+
+    - name: Generate produtcs pages from template
+      ansible.builtin.template:
+        src: /home/user/task/product_template.j2
+        dest: /var/www/html/{{ item.name | lower }}.html
+      loop: "{{ products }}"
+
+      notify:
+            - Restart_nginx
+
+  handlers:
+    - name: Restart_nginx
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
